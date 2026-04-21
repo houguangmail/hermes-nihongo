@@ -7,7 +7,7 @@ from streamlit.components.v1 import html
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Hermes Nihongo", page_icon="🇯🇵", layout="centered")
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.4"
 
 # Mobile-app styling for a native iOS feel
 
@@ -24,6 +24,8 @@ if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'mode' not in st.session_state:
     st.session_state.mode = "Simulation"
+if 'voice_enabled' not in st.session_state:
+    st.session_state.voice_enabled = True
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -32,7 +34,14 @@ with st.sidebar:
         "Training Mode", 
         ["Simulation", "Correction", "Daily Challenge"]
     )
-    st.session_state.voice_enabled = st.checkbox("🔊 Enable Voice", value=True)
+    st.session_state.voice_enabled = st.checkbox("🔊 Enable Voice", value=st.session_state.get('voice_enabled', True))
+    if st.button("🔓 Unlock Voice"):
+        html(f'''
+            <script>
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+            </script>
+        ''', height=0)
+        st.toast("Voice Unlocked!")
     st.divider()
     st.info("🎙️ Tip: Use the iOS keyboard microphone for voice-to-text!")
 
