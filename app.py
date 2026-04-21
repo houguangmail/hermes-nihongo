@@ -115,6 +115,19 @@ st.caption("Powered by Gemma 4 31B on M5 Pro")
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        if message["role"] == "assistant" and st.session_state.voice_enabled:
+            # Extract Japanese for the replay button
+            jp_text = "".join(re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]+', message["content"]))
+            speech_text = jp_text if jp_text else message["content"]
+            
+            if st.button("🔊 Replay", key=f"replay_{message.get('id', message['content'][:20])}"):
+                html(f'''
+                    <script>
+                    var msg = new SpeechSynthesisUtterance("{speech_text}");
+                    msg.lang = "ja-JP";
+                    window.speechSynthesis.speak(msg);
+                    </script>
+                ''', height=0)
 
 # --- INPUT ---
 if prompt := st.chat_input("Type or speak in Japanese..."):
