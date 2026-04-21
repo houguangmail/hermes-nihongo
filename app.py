@@ -69,7 +69,7 @@ def get_local_ai_response(user_input, mode):
     
     # Construct the payload for an OpenAI-compatible server (oMLX/SGLang/vLLM)
     payload = {
-        "model": "gemma-4-31b", 
+        "model": "Gemma-4-31B-it-4bit", 
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_input}
