@@ -2,6 +2,8 @@
 import streamlit as st
 import requests
 import json
+import re
+from streamlit.components.v1 import html
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Hermes Nihongo", page_icon="🇯🇵", layout="centered")
@@ -27,6 +29,7 @@ with st.sidebar:
         "Training Mode", 
         ["Simulation", "Correction", "Daily Challenge"]
     )
+    st.session_state.voice_enabled = st.checkbox("🔊 Enable Voice", value=True)
     st.divider()
     st.info("🎙️ Tip: Use the iOS keyboard microphone for voice-to-text!")
 
@@ -123,4 +126,20 @@ if prompt := st.chat_input("Type or speak in Japanese..."):
         with st.spinner("Sensei is thinking..."):
             response = get_local_ai_response(prompt, st.session_state.mode)
             st.markdown(response)
+            
+            # --- Voice Synthesis ---
+            if st.session_state.voice_enabled:
+                # Extract Japanese characters for clean pronunciation
+                jp_text = "".join(re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]+', response))
+                # Fallback to full response if no Japanese found
+                speech_text = jp_text if jp_text else response
+                # Trigger native iOS voice via JS
+                html(f'''
+                    <script>
+                    var msg = new SpeechSynthesisUtterance("{speech_text}");
+                    msg.lang = "ja-JP";
+                    window.speechSynthesis.speak(msg);
+                    </script>
+                ''', height=0)
+                
             st.session_state.messages.append({"role": "assistant", "content": response})
