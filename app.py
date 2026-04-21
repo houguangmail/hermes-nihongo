@@ -1,109 +1,87 @@
-
-import streamlit as st
-import requests
-import json
-
-# --- CONFIGURATION ---
-st.set_page_config(page_title="Hermes Nihongo", page_icon="🇯🇵", layout="centered")
-
-# Mobile-app styling for a native iOS feel
-st.markdown("""
-    <style>
-    .stApp { max-width: 600px; margin: 0 auto; }
-    .stChatMessage { border-radius: 15px; margin-bottom: 10px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- SESSION STATE ---
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
-if 'mode' not in st.session_state:
-    st.session_state.mode = "Simulation"
-
-# --- SIDEBAR ---
-with st.sidebar:
-    st.title("Sensei Settings")
-    st.session_state.mode = st.selectbox(
-        "Training Mode", 
-        ["Simulation", "Correction", "Daily Challenge"]
-    )
-    st.divider()
-    st.info("🎙️ Tip: Use the iOS keyboard microphone for voice-to-text!")
-
-# --- AI LOGIC ---
-def get_local_ai_response(user_input, mode):
-    # Access the URL from Streamlit Secrets
-    try:
-        base_url = st.secrets["LOCAL_AI_URL"]
-    except KeyError:
-        return "⚠️ Error: LOCAL_AI_URL not found in Streamlit Secrets. Please add it in the app settings!"
-
-    # Advanced System Prompts to turn Gemma 4 into a professional coach
-    mode_prompts = {
-        "Simulation": (
-            "You are a friendly, natural Japanese conversation partner. "
-            "Keep responses concise and conversational. For every response, strictly use this format:\n"
-            "1. [Japanese text]\n"
-            "2. [Romaji]\n"
-            "3. [English translation]\n\n"
-            "Then, ask a follow-up question to keep the conversation moving. Stay in character!"
-        ),
-        "Correction": (
-            "You are a professional Japanese linguist and teacher. Analyze the user's Japanese input carefully. "
-            "Your goal is to make them sound like a native speaker. Strictly use this format:\n"
-            "✅ Corrected: [The corrected Japanese sentence]\n"
-            "📖 Romaji: [Romaji of corrected sentence]\n"
-            "🌍 English: [English translation]\n\n"
-            "💡 Explanation: [Explain the grammar or nuance change. Why is the correction better?]\n"
-            "✨ Natural Alternative: [How a native speaker would actually say this in a real-world setting]."
-        ),
-        "Daily Challenge": (
-            "You are a Japanese vocabulary coach. Give the user a daily challenge: "
-            "introduce one useful word or grammar point and ask them to use it in a sentence. "
-            "Once they try it, provide a detailed critique, Romaji, and English translation. "
-            "If they get it perfectly, give them a gold star (⭐)!"
-        )
-    }
-
-    system_prompt = mode_prompts.get(mode, "You are a helpful Japanese teacher.")
+    import streamlit as st
+    import requests
+    import json
     
-    # Construct the payload for an OpenAI-compatible server (oMLX/SGLang/vLLM)
-    payload = {
-        "model": "gemma-4-31b", 
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_input}
-        ],
-        "stream": False,
-        "temperature": 0.7
-    }
-
-    try:
-        # Calling your local MacBook server via the Ngrok bridge
-        response = requests.post(f"{base_url}/v1/chat/completions", json=payload, timeout=60)
-        response.raise_for_status()
-        result = response.json()
-        return result['choices'][0]['message']['content']
-    except Exception as e:
-        return f"❌ Sensei is currently offline. (Error: {str(e)})\n\nMake sure your MacBook is on and Ngrok is running!"
-
-# --- UI ---
-st.title("🇯🇵 Hermes Nihongo")
-st.caption("Powered by Gemma 4 31B on M5 Pro")
-
-# Display chat history
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# --- INPUT ---
-if prompt := st.chat_input("Type or speak in Japanese..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Sensei is thinking..."):
-            response = get_local_ai_response(prompt, st.session_state.mode)
-            st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+    # --- CONFIGURATION ---
+    st.set_page_config(page_title="Hermes Nihongo", page_icon="🇯🇵", layout="centered")
+    
+    st.markdown("""
+        <style>
+        .stApp { max-width: 600px; margin: 0 auto; }
+        .stChatMessage { border-radius: 15px; margin-bottom: 10px; }
+        </style>
+        """, unsafe_allow_html=True)
+    
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
+    if 'mode' not in st.session_state:
+        st.session_state.mode = "Simulation"
+    
+    with st.sidebar:
+        st.title("Sensei Settings")
+        st.session_state.mode = st.selectbox("Training Mode", ["Simulation", "Correction", "Daily Challenge"])
+        st.divider()
+        st.info("🎙️ Tip: Use the iOS keyboard microphone for voice-to-text!")
+    
+    def get_local_ai_response(user_input, mode):
+        try:
+            base_url = st.secrets["LOCAL_AI_URL"]
+        except KeyError:
+            return "⚠️ Error: LOCAL_AI_URL not found in Streamlit Secrets."
+    
+        mode_prompts = {
+            "Simulation": "You are a friendly Japanese conversation partner. Use format: 1. Japanese, 2. Romaji, 3. English. Ask a follow-up question.",
+            "Correction": "You are a professional Japanese linguist. Use format: ✅ Corrected, 📖 Romaji, 🌍 English, 💡 Explanation, ✨ Natural Alternative.",
+            "Daily Challenge": "You are a Japanese vocabulary coach. Give a daily word challenge and provide feedback with a gold star (⭐) if correct."
+        }
+        system_prompt = mode_prompts.get(mode, "You are a helpful Japanese teacher.")
+        
+        # --- THE FIX: Trying multiple common oMLX endpoints ---
+        endpoints = ["/v1/chat/completions", "/chat/completions", "/generate"]
+        
+        for endpoint in endpoints:
+            try:
+                # Payload structure compatible with most local servers
+                payload = {
+                    "model": "gemma-4-31b",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_input}
+                    ],
+                    "temperature": 0.7
+                }
+                
+                response = requests.post(f"{base_url}{endpoint}", json=payload, timeout=60)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    # Handle both OpenAI-style and simple lapped responses
+                    if 'choices' in result:
+                        return result['choices'][0]['message']['content']
+                    elif 'response' in result:
+                        return result['response']
+                    elif 'text' in result:
+                        return result['text']
+                    else:
+                        return str(result)
+            except Exception:
+                continue
+    
+        return "❌ Sensei is offline or using an unknown API endpoint. Please check your oMLX server logs!"
+    
+    st.title("🇯🇵 Hermes Nihongo")
+    st.caption("Powered by Gemma 4 31B on M5 Pro")
+    
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    if prompt := st.chat_input("Type or speak in Japanese..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        with st.chat_message("assistant"):
+            with st.spinner("Sensei is thinking..."):
+                response = get_local_ai_response(prompt, st.session_state.mode)
+                st.markdown(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
